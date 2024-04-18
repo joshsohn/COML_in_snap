@@ -304,7 +304,7 @@ class TrajectoryGenerator:
 
         # Generate smooth trajectories
         self.T = 30
-        self.num_traj = 50
+        self.num_traj = 2
         num_knots = 6
         poly_orders = (9, 9, 9)
         deriv_orders = (4, 4, 4)

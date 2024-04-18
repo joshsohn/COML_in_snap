@@ -2,6 +2,7 @@
 import numpy as np
 import os
 import pickle
+import rospkg
 
 from dynamics import prior
 from structs import AttCmdClass, ControlLogClass, GoalClass
@@ -26,14 +27,15 @@ class IntegratorClass:
 
 class OuterLoop:
     def __init__(self, params, controller='coml'):
-        print(controller)
         self.controller = controller
 
         if self.controller == 'coml':
+            rospack = rospkg.RosPack()
+            package_path = rospack.get_path('outer_loop_python')
             trial_name = 'z_up_reg_P_5e-1_kRz'
             filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.5000.pkl'
 
-            model_dir = f'models/{trial_name}'
+            model_dir = f'{package_path}/models/{trial_name}'
             model_pkl_loc = os.path.join(model_dir, filename)
             with open(model_pkl_loc, 'rb') as f:
                 train_results = pickle.load(f)
@@ -107,20 +109,18 @@ class OuterLoop:
             qn = 1.1 + self.pnorm**2
 
             # Integrate adaptation law via trapezoidal rule
-            R_flatten = quaternion_to_rotation_matrix(self.q).flatten()
+            R_flatten = quaternion_to_rotation_matrix(state.q).flatten()
             dA, y = self.adaptation_law(state.p, state.v, R_flatten, state.w, goal.p, goal.v)
             pA = self.pA_prev + (t - self.t_prev)*(self.dA_prev + dA)/2
             P = self.P
             A = (np.maximum(np.abs(pA), 1e-6 * np.ones_like(pA))**(qn-1) * np.sign(pA) * (np.ones_like(pA) - np.isclose(pA, 0, atol=1e-6)) ) @ P
 
             f_hat = A @ y
-            # u_d, τ = controller(q, dq, r, dr, ddr, f_hat, type='adaptive')
-        else:
-            f_hat = 0
-
-            self.pA_prev = self.pA
+            self.pA_prev = pA
             self.t_prev = t
             self.dA_prev = dA
+        else:
+            f_hat = 0
 
         F_W = self.get_force(dt, state, goal, f_hat)
         q_ref = self.get_attitude(state, goal, F_W)
