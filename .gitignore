@@ -1,0 +1,10 @@
+logs/
+build/
+devel/
+
+**/.catkin_tools/
+**/.vscode/
+
+**.log
+**.pyc
+*.db

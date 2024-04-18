@@ -1,0 +1,35 @@
+# PD gains (/1000)
+#Kr: [4250, 4250, 300]     # TODO: Andrea: double check these gains (and yaw especially)
+#Komega: [1120, 1120, 230]  # TODO: Andrea: double check gains (yaw)
+Kr: [1400.0, 1400.0, 1260.0]
+Komega: [330.0, 330.0, 300.0]
+
+# Inertia, in kg·(m^2) 
+#Jdiag: [0.03, 0.03, 0.09] #//Diagonal elements of the inertia matrix in body frame
+Jdiag: [0.03, 0.03, 0.09]
+
+# Arm length, in m. Distance from the motor to the c.o.m of the drone
+l: 0.165
+
+# Drag coefficient of the propeller. It is such that the
+# moment created by one motor **around the motor axis** is M=cd*f,
+# where f is the thrust produced by that motor. M in N.m, and f in N
+#cd: 0.01282 #0.02 # From https://wikis.mit.edu/confluence/display/acl/RCbenchmark+Thrust+Stand
+cd: 0.02
+
+# Thrust curve for single motor, [an ...a1 a0].
+# Maps thrust (N) to throttle (normalized [0, 1])
+# default: [0.0, 0.13, 0.0]
+# 1st order: [0.1209039864, 0.0] # From https://wikis.mit.edu/confluence/display/acl/RCbenchmark+Thrust+Stand
+# 2nd order poly: [-0.0071291, 0.17022, 0.0] # From https://wikis.mit.edu/confluence/display/acl/RCbenchmark+Thrust+Stand
+thrust_curve_cw:  [0.180002, 0.0] #[0.16, 0.0]  # For clockwise props, 2200mAh 4s
+thrust_curve_ccw: [0.140000, 0.0] #[0.16, 0.0]  # For counterclockwise props, 2200mAh 4s
+
+# Spinning direction of propellers. -1: clockwise, +1: counterclockwise
+motor_spin: [-1, 1, -1, 1, -1, 1]
+
+# Center of mass ofter in body frame (m)
+# com: [0.002060, -0.000043, 0.0]
+com: [0.0, 0.0, 0.0]
+
+mixer: "HEX"
