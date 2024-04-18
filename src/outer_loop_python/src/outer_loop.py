@@ -1,6 +1,15 @@
+# import jax.numpy as jnp
 import numpy as np
+import os
+import pickle
+
+from dynamics import prior
 from structs import AttCmdClass, ControlLogClass, GoalClass
 from helpers import quaternion_multiply
+from utils import params_to_posdef, quaternion_to_rotation_matrix
+
+def convert_p_qbar(p):
+    return np.sqrt(1/(1 - 1/p) - 1.1)
 
 class IntegratorClass:
     def __init__(self):
@@ -16,7 +25,28 @@ class IntegratorClass:
         return self.value_
 
 class OuterLoop:
-    def __init__(self, params):
+    def __init__(self, params, controller='coml'):
+        print(controller)
+        self.controller = controller
+
+        if self.controller == 'coml':
+            trial_name = 'z_up_reg_P_5e-1_kRz'
+            filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.5000.pkl'
+
+            model_dir = f'models/{trial_name}'
+            model_pkl_loc = os.path.join(model_dir, filename)
+            with open(model_pkl_loc, 'rb') as f:
+                train_results = pickle.load(f)
+            
+            print('COML model loaded!')
+            
+            self.pnorm = convert_p_qbar(train_results['pnorm'])
+            self.W = train_results['model']['W']
+            self.b = train_results['model']['b']
+            self.Λ = params_to_posdef(train_results['controller']['Λ'])
+            self.K = params_to_posdef(train_results['controller']['K'])
+            self.P = params_to_posdef(train_results['controller']['P'])
+        
         self.params_ = params
         self.GRAVITY = np.array([0, 0, -9.80665])
 
@@ -31,10 +61,23 @@ class OuterLoop:
 
         self.mode_xy_last_ = GoalClass.Mode.POS_CTRL
         self.mode_z_last_ = GoalClass.Mode.POS_CTRL
-
+        
         self.reset()
 
     def reset(self):
+        if self.controller == 'coml':
+            # Assume starting position, velocity, attitude, and angular velocity of 0
+            q0 = np.zeros(3)
+            dq0 = np.zeros(3)
+            R_flatten0 = np.eye(3).flatten()
+            Omega0 = np.zeros(3)
+            r0 = np.zeros(3)
+            dr0 = np.zeros(3)
+            
+            self.dA_prev, y0 = self.adaptation_law(q0, dq0, R_flatten0, Omega0, r0, dr0)
+            self.pA_prev = np.ones((q0.size, y0.size))
+            self.t_prev = 0
+            
         self.Ix_.reset()
         self.Iy_.reset()
         self.Iz_.reset()
@@ -43,6 +86,7 @@ class OuterLoop:
         self.a_fb_last_ = np.zeros(3)
         self.j_fb_last_ = np.zeros(3)
         self.t_last_ = 0
+    
     
     def update_log(self, state):
         self.log_ = ControlLogClass()
@@ -58,8 +102,27 @@ class OuterLoop:
             self.t_last_ = t
         else:
             print("Warning: non-positive dt:", dt, "[s].")
+        
+        if self.controller == 'coml':
+            qn = 1.1 + self.pnorm**2
 
-        F_W = self.get_force(dt, state, goal)
+            # Integrate adaptation law via trapezoidal rule
+            R_flatten = quaternion_to_rotation_matrix(self.q).flatten()
+            dA, y = self.adaptation_law(state.p, state.v, R_flatten, state.w, goal.p, goal.v)
+            pA = self.pA_prev + (t - self.t_prev)*(self.dA_prev + dA)/2
+            P = self.P
+            A = (np.maximum(np.abs(pA), 1e-6 * np.ones_like(pA))**(qn-1) * np.sign(pA) * (np.ones_like(pA) - np.isclose(pA, 0, atol=1e-6)) ) @ P
+
+            f_hat = A @ y
+            # u_d, τ = controller(q, dq, r, dr, ddr, f_hat, type='adaptive')
+        else:
+            f_hat = 0
+
+            self.pA_prev = self.pA
+            self.t_prev = t
+            self.dA_prev = dA
+
+        F_W = self.get_force(dt, state, goal, f_hat)
         q_ref = self.get_attitude(state, goal, F_W)
         w_ref = self.get_rates(dt, state, goal, F_W, self.log_.a_fb, q_ref)
 
@@ -71,66 +134,93 @@ class OuterLoop:
 
         return cmd
 
-    def get_force(self, dt, state, goal):
-        e = goal.p - state.p
-        edot = goal.v - state.v
+    def adaptation_law(self, q, dq, R_flatten, Omega, r, dr):
+        # Regressor features
+        y = np.concatenate((q, dq, R_flatten, Omega))
+        for W, b in zip(self.W, self.b):
+            y = np.tanh(W@y + b)
 
-        # Saturate error so it isn't too much for control gains
-        e = np.minimum(np.maximum(e, -self.params_.maxPosErr), self.params_.maxPosErr)
-        edot = np.minimum(np.maximum(edot, -self.params_.maxVelErr), self.params_.maxVelErr)
+        # Auxiliary signals
+        Λ, P = self.Λ, self.P
+        e, de = q - r, dq - dr
+        s = de + Λ@e
 
-        # Manipulate error signals based on selected flight mode
-        # Reset integrators on mode change
-        if goal.mode_xy != self.mode_xy_last_:
-            self.Ix_.reset()
-            self.Iy_.reset()
-            self.mode_xy_last_ = goal.mode_xy
+        dA = np.outer(s, y) @ P
+        return dA, y
 
-        if goal.mode_z != self.mode_z_last_:
-            self.Iz_.reset()
-            self.mode_z_last_ = goal.mode_z
+    def get_force(self, dt, state, goal, f_hat):
+        if self.controller == 'coml':
+            # Auxiliary signals
+            Λ, K = self.Λ, self.K
 
-        # Check which control mode to use for x-y
-        if goal.mode_xy == GoalClass.Mode.POS_CTRL:
-            self.Ix_.increment(e[0], dt)
-            self.Iy_.increment(e[1], dt)
-        elif goal.mode_xy == GoalClass.Mode.VEL_CTRL:
-            # Do not worry about position error---only vel error
-            e[0] = e[1] = 0
-        elif goal.mode_xy == GoalClass.Mode.ACC_CTRL:
-            # Do not generate feedback accel---only control on goal accel
-            e[0] = e[1] = 0
-            edot[0] = edot[1] = 0
+            e, edot = state.p - goal.p, state.v - goal.v
+            s = edot + Λ@e
+            v, dv = goal.v - Λ@e, goal.a - Λ@edot
 
-        # Check which control mode to use for z
-        if goal.mode_z == GoalClass.Mode.POS_CTRL:
-            self.Iz_.increment(e[2], dt)
-        elif goal.mode_z == GoalClass.Mode.VEL_CTRL:
-            # Do not worry about position error---only vel error
-            e[2] = 0
-        elif goal.mode_z == GoalClass.Mode.ACC_CTRL:
-            # Do not generate feedback accel---only control on goal accel
-            e[2] = 0
-            edot[2] = 0
+            # Control input and adaptation law
+            H, C, g, B = prior(state.p, state.v)
+            τ = H@dv + C@v + g - f_hat - K@s
+            F_W = np.linalg.solve(B, τ)
+        else:
+            e = goal.p - state.p
+            edot = goal.v - state.v
 
-        # Compute feedback acceleration via PID, eq (2.9)
-        eint = np.array([self.Ix_.value(), self.Iy_.value(), self.Iz_.value()])
-        a_fb = np.multiply(self.params_.Kp, e) + np.multiply(self.params_.Ki, eint) + np.multiply(self.params_.Kd, edot)
+            # Saturate error so it isn't too much for control gains
+            e = np.minimum(np.maximum(e, -self.params_.maxPosErr), self.params_.maxPosErr)
+            edot = np.minimum(np.maximum(edot, -self.params_.maxVelErr), self.params_.maxVelErr)
+
+            # Manipulate error signals based on selected flight mode
+            # Reset integrators on mode change
+            if goal.mode_xy != self.mode_xy_last_:
+                self.Ix_.reset()
+                self.Iy_.reset()
+                self.mode_xy_last_ = goal.mode_xy
+
+            if goal.mode_z != self.mode_z_last_:
+                self.Iz_.reset()
+                self.mode_z_last_ = goal.mode_z
+
+            # Check which control mode to use for x-y
+            if goal.mode_xy == GoalClass.Mode.POS_CTRL:
+                self.Ix_.increment(e[0], dt)
+                self.Iy_.increment(e[1], dt)
+            elif goal.mode_xy == GoalClass.Mode.VEL_CTRL:
+                # Do not worry about position error---only vel error
+                e[0] = e[1] = 0
+            elif goal.mode_xy == GoalClass.Mode.ACC_CTRL:
+                # Do not generate feedback accel---only control on goal accel
+                e[0] = e[1] = 0
+                edot[0] = edot[1] = 0
+
+            # Check which control mode to use for z
+            if goal.mode_z == GoalClass.Mode.POS_CTRL:
+                self.Iz_.increment(e[2], dt)
+            elif goal.mode_z == GoalClass.Mode.VEL_CTRL:
+                # Do not worry about position error---only vel error
+                e[2] = 0
+            elif goal.mode_z == GoalClass.Mode.ACC_CTRL:
+                # Do not generate feedback accel---only control on goal accel
+                e[2] = 0
+                edot[2] = 0
+
+            # Compute feedback acceleration via PID, eq (2.9)
+            eint = np.array([self.Ix_.value(), self.Iy_.value(), self.Iz_.value()])
+            a_fb = np.multiply(self.params_.Kp, e) + np.multiply(self.params_.Ki, eint) + np.multiply(self.params_.Kd, edot)
 
 
-        # Compute total desired force (expressed in world frame), eq (2.12)
-        F_W = self.params_.mass * (goal.a + a_fb - self.GRAVITY)
+            # Compute total desired force (expressed in world frame), eq (2.12)
+            F_W = self.params_.mass * (goal.a + a_fb - self.GRAVITY)
 
         # Log control signals for debugging and inspection
         self.log_.p = state.p
         self.log_.p_ref = goal.p
         self.log_.p_err = e
-        self.log_.p_err_int = eint
+        # self.log_.p_err_int = eint
         self.log_.v = state.v
         self.log_.v_ref = goal.v
         self.log_.v_err = edot
         self.log_.a_ff = goal.a
-        self.log_.a_fb = a_fb
+        # self.log_.a_fb = a_fb
         self.log_.F_W = F_W
 
         # Return total desired force expressed in world frame
