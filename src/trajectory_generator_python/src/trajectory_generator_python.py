@@ -434,8 +434,8 @@ class TrajectoryGenerator:
         # random_vector = np.random.randn(3)
         # unit_vector = random_vector/np.linalg.norm(random_vector)
         # wind_vector = unit_vector*w
-        wind.w_nominal.x = 0
-        # wind.w_nominal.x = w
+        # wind.w_nominal.x = 0
+        wind.w_nominal.x = w
         wind.w_nominal.y = 0
         wind.w_nominal.z = 0
         wind.w_gust.x = 0

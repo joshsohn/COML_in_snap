@@ -115,7 +115,6 @@ class OuterLoop:
             A = (np.maximum(np.abs(pA), 1e-6 * np.ones_like(pA))**(qn-1) * np.sign(pA) * (np.ones_like(pA) - np.isclose(pA, 0, atol=1e-6)) ) @ P
 
             f_hat = A @ y
-            # f_hat = 0
 
             # Log adaptation values
             self.log_.P_norm = np.linalg.norm(P)
