@@ -1,5 +1,8 @@
 import math
 from snapstack_msgs.msg import Goal
+import numpy as np
+import rospkg
+import subprocess
 
 def quat2yaw(q) -> float:
     yaw = math.atan2(2 * (q.w * q.z + q.x * q.y),
@@ -68,3 +71,18 @@ def simpleInterpolation(current, dest_pos, dest_yaw, vel, vel_yaw,
     goal.power = True
 
     return goal, finished
+
+def start_rosbag_recording(topic_name):
+    print('Starting rosbag recording!')
+    rospack = rospkg.RosPack()
+    package_path = rospack.get_path('outer_loop_python')
+    # Define the command to start rosbag recording
+    command = ['rosbag', 'record', '-o', f'{package_path}/rosbags/', topic_name]
+    # Start recording
+    rosbag_proc = subprocess.Popen(command)
+    return rosbag_proc
+
+def stop_rosbag_recording(rosbag_proc):
+    print('Stopping rosbag recording!')
+    # Terminate the rosbag recording process
+    rosbag_proc.send_signal(subprocess.signal.SIGINT)

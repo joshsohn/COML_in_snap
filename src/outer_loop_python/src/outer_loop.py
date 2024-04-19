@@ -32,8 +32,8 @@ class OuterLoop:
         if self.controller == 'coml':
             rospack = rospkg.RosPack()
             package_path = rospack.get_path('outer_loop_python')
-            trial_name = 'z_up_reg_P_5e-1_kRz'
-            filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.5000.pkl'
+            trial_name = 'reg_P_5000_constant_Kr'
+            filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=5000.0000.pkl'
 
             model_dir = f'{package_path}/models/{trial_name}'
             model_pkl_loc = os.path.join(model_dir, filename)
@@ -78,7 +78,6 @@ class OuterLoop:
             
             self.dA_prev, y0 = self.adaptation_law(q0, dq0, R_flatten0, Omega0, r0, dr0)
             self.pA_prev = np.ones((q0.size, y0.size))
-            self.t_prev = 0
             
         self.Ix_.reset()
         self.Iy_.reset()
@@ -111,13 +110,21 @@ class OuterLoop:
             # Integrate adaptation law via trapezoidal rule
             R_flatten = quaternion_to_rotation_matrix(state.q).flatten()
             dA, y = self.adaptation_law(state.p, state.v, R_flatten, state.w, goal.p, goal.v)
-            pA = self.pA_prev + (t - self.t_prev)*(self.dA_prev + dA)/2
+            pA = self.pA_prev + (dt)*(self.dA_prev + dA)/2
             P = self.P
             A = (np.maximum(np.abs(pA), 1e-6 * np.ones_like(pA))**(qn-1) * np.sign(pA) * (np.ones_like(pA) - np.isclose(pA, 0, atol=1e-6)) ) @ P
 
             f_hat = A @ y
+            # f_hat = 0
+
+            # Log adaptation values
+            self.log_.P_norm = np.linalg.norm(P)
+            self.log_.A_norm = np.linalg.norm(A)
+            self.log_.y_norm = np.linalg.norm(y)
+            self.log_.f_hat = f_hat
+
+            # Update prev values
             self.pA_prev = pA
-            self.t_prev = t
             self.dA_prev = dA
         else:
             f_hat = 0
@@ -206,7 +213,6 @@ class OuterLoop:
             # Compute feedback acceleration via PID, eq (2.9)
             eint = np.array([self.Ix_.value(), self.Iy_.value(), self.Iz_.value()])
             a_fb = np.multiply(self.params_.Kp, e) + np.multiply(self.params_.Ki, eint) + np.multiply(self.params_.Kd, edot)
-
 
             # Compute total desired force (expressed in world frame), eq (2.12)
             F_W = self.params_.mass * (goal.a + a_fb - self.GRAVITY)
@@ -310,3 +316,6 @@ class OuterLoop:
         self.log_.w_ref = rates
 
         return rates
+
+    def get_log(self):
+        return self.log_

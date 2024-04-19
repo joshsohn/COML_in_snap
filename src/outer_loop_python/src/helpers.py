@@ -28,3 +28,29 @@ def quaternion_multiply(quaternion0, quaternion1):
                      x1 * w0 + y1 * z0 - z1 * y0 + w1 * x0,
                      -x1 * z0 + y1 * w0 + z1 * x0 + w1 * y0,
                      x1 * y0 - y1 * x0 + z1 * w0 + w1 * z0], dtype=np.float64)
+                     
+def get_rpy(quaternion):
+    """Computes the roll, pitch, and yaw from a normalized quaternion array."""
+    w, x, y, z = quaternion
+    # Normalize the quaternion to avoid errors in computation
+    norm = np.sqrt(x**2 + y**2 + z**2 + w**2)
+    x, y, z, w = x / norm, y / norm, z / norm, w / norm
+
+    # Roll (x-axis rotation)
+    sinr_cosp = 2 * (w * x + y * z)
+    cosr_cosp = 1 - 2 * (x * x + y * y)
+    roll = np.arctan2(sinr_cosp, cosr_cosp)
+
+    # Pitch (y-axis rotation)
+    sinp = 2 * (w * y - z * x)
+    if abs(sinp) >= 1:
+        pitch = np.pi / 2 * np.sign(sinp)  # Use 90 degrees if out of range
+    else:
+        pitch = np.arcsin(sinp)
+
+    # Yaw (z-axis rotation)
+    siny_cosp = 2 * (w * z + x * y)
+    cosy_cosp = 1 - 2 * (y * y + z * z)
+    yaw = np.arctan2(siny_cosp, cosy_cosp)
+
+    return Vector3(roll, pitch, yaw)

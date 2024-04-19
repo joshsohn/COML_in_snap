@@ -62,6 +62,11 @@ class ControlLogClass:
         self.mode_xy = GoalClass.Mode.POS_CTRL
         self.mode_z = GoalClass.Mode.POS_CTRL
 
+        self.P_norm = 0
+        self.A_norm = 0
+        self.y_norm = 0
+        self.f_hat = np.zeros(3)
+
 class ModeClass(Enum):
     Preflight = 0
     SpinningUp = 1

@@ -1,16 +1,17 @@
-#!/usr/bin/env python3.8
+#!/usr/bin/env python3
 
-from helpers import point_msg_to_array, vector_msg_to_array, quaternion_msg_to_quaternion, point_array_to_msg, vector_array_to_msg, quaternion_array_to_msg
-from outer_loop import OuterLoop
-from structs import AttCmdClass, GoalClass, ModeClass, ParametersClass, StateClass
 import numpy as np
 import rospy
-from snapstack_msgs.msg import State, Goal, AttitudeCommand, ControlLog
+from helpers import point_msg_to_array, vector_msg_to_array, quaternion_msg_to_quaternion, point_array_to_msg, vector_array_to_msg, quaternion_array_to_msg, get_rpy
+from outer_loop import OuterLoop
+from structs import AttCmdClass, GoalClass, ModeClass, ParametersClass, StateClass
+from std_msgs.msg import Header
+from snapstack_msgs.msg import State, Goal, AttitudeCommand, ControlLog, QuadFlightMode
 
 class OuterLoopROS:
     def __init__(self):
         # Initialize the ROS node with the default name 'my_node_name' (will be overwritten by launch file)
-        rospy.init_node('my_node_name')   
+        rospy.init_node('my_node_name')
 
         self.control_dt_ = 0.0
         self.Tspinup_ = 0.0
@@ -38,6 +39,7 @@ class OuterLoopROS:
  
         self.pub_att_cmd_ = rospy.Publisher('attcmd', AttitudeCommand, queue_size=1)
         self.pub_log_ = rospy.Publisher('log',ControlLog, queue_size=1)
+        self.pub_mode_ = rospy.Publisher('/globalflightmode',QuadFlightMode, queue_size=1)
 
         rospy.Timer(rospy.Duration(self.control_dt_), self.cntrl_cb)
 
@@ -166,6 +168,11 @@ class OuterLoopROS:
             cmd.F_W = np.zeros(3)
             rospy.logwarn_throttle(0.5, "Emergency stop.")
 
+            quad_flight_mode = QuadFlightMode()
+            quad_flight_mode.header = Header(stamp=rospy.Time.now())
+            quad_flight_mode.mode = QuadFlightMode.KILL
+            self.pub_mode_.publish(quad_flight_mode)
+
         # Publish command via ROS
         attmsg = AttitudeCommand()
         attmsg.header.stamp = t_now
@@ -175,6 +182,48 @@ class OuterLoopROS:
         attmsg.F_W = vector_array_to_msg(cmd.F_W)
 
         self.pub_att_cmd_.publish(attmsg)
+
+        self.publish_log(attmsg)
+    
+    def publish_log(self, attmsg):
+        msg = ControlLog()
+        log = self.olcntrl_.get_log()
+
+        msg.header = attmsg.header
+
+        msg.p = vector_array_to_msg(log.p)
+        msg.p_ref = vector_array_to_msg(log.p_ref)
+        msg.p_err = vector_array_to_msg(log.p_err)
+        msg.p_err_int = vector_array_to_msg(log.p_err_int)
+
+        msg.v = vector_array_to_msg(log.v)
+        msg.v_ref = vector_array_to_msg(log.v_ref)
+        msg.v_err = vector_array_to_msg(log.v_err)
+
+        msg.a_ff = vector_array_to_msg(log.a_ff)
+        msg.a_fb = vector_array_to_msg(log.a_fb)
+
+        msg.j_ff = vector_array_to_msg(log.j_ff)
+        msg.j_fb = vector_array_to_msg(log.j_fb)
+
+        msg.q = quaternion_array_to_msg(log.q)
+        msg.q_ref = quaternion_array_to_msg(log.q_ref)
+        msg.rpy = get_rpy(log.q)
+        msg.rpy_ref = get_rpy(log.q_ref)
+
+        msg.w = vector_array_to_msg(log.w)
+        msg.w_ref = vector_array_to_msg(log.w_ref)
+
+        msg.F_W = vector_array_to_msg(log.F_W)
+
+        msg.power = attmsg.power
+
+        msg.P_norm = log.P_norm
+        msg.A_norm = log.A_norm
+        msg.y_norm = log.y_norm
+        msg.f_hat = vector_array_to_msg(log.f_hat)
+
+        self.pub_log_.publish(msg)
 
     def do_preflight_checks_pass(self):
         return self.check_state()

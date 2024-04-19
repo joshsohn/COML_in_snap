@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.8
+#!/usr/bin/env python3
 
 import numpy as np
 import datetime
@@ -12,7 +12,7 @@ import os
 import pickle
 from utils import spline, random_ragged_spline
 from geometry_msgs.msg import Pose, Twist, Vector3
-from helpers import quat2yaw, saturate, simpleInterpolation, wrap
+from helpers import quat2yaw, saturate, simpleInterpolation, wrap, start_rosbag_recording, stop_rosbag_recording
 from snapstack_msgs.msg import State, Goal, QuadFlightMode, Wind, AttitudeCommand
 from structs import FlightMode
 
@@ -142,6 +142,7 @@ class TrajectoryGenerator:
             self.pub_goal_.publish(self.goal_)
             self.flight_mode_ = FlightMode.GROUND
             self.reset_goal()
+            stop_rosbag_recording(self.rosbag_proc)
             rospy.loginfo("Motors killed, switched to GROUND mode.")
             return  
         elif self.flight_mode_ == FlightMode.INIT_POS_TRAJ and msg.mode == msg.LAND:
@@ -206,6 +207,7 @@ class TrajectoryGenerator:
                 self.traj_goals_ = self.traj_goals_full_[self.index]
                 # self.index_msgs_ = self.index_msgs_full_
                 self.flight_mode_ = FlightMode.INIT_POS_TRAJ
+                self.rosbag_proc = start_rosbag_recording('-a')
                 print(f"Take off completed, going to the initial position of trajectory {self.index+1}...")
             else:
                 # Increment the z cmd each timestep for a smooth takeoff.
@@ -282,6 +284,7 @@ class TrajectoryGenerator:
                 # Landed, kill motors
                 self.goal_.power = False
                 self.flight_mode_ = FlightMode.GROUND
+                stop_rosbag_recording(self.rosbag_proc)
                 print("Landed")
 
         # Apply safety bounds
@@ -304,7 +307,7 @@ class TrajectoryGenerator:
 
         # Generate smooth trajectories
         self.T = 30
-        self.num_traj = 2
+        self.num_traj = 1
         num_knots = 6
         poly_orders = (9, 9, 9)
         deriv_orders = (4, 4, 4)
@@ -431,7 +434,8 @@ class TrajectoryGenerator:
         # random_vector = np.random.randn(3)
         # unit_vector = random_vector/np.linalg.norm(random_vector)
         # wind_vector = unit_vector*w
-        wind.w_nominal.x = w
+        wind.w_nominal.x = 0
+        # wind.w_nominal.x = w
         wind.w_nominal.y = 0
         wind.w_nominal.z = 0
         wind.w_gust.x = 0
