@@ -26,7 +26,7 @@ class IntegratorClass:
         return self.value_
 
 class OuterLoop:
-    def __init__(self, params, controller='coml'):
+    def __init__(self, params, state0, goal0, controller='coml'):
         self.controller = controller
 
         if self.controller == 'coml':
@@ -72,18 +72,19 @@ class OuterLoop:
         self.mode_xy_last_ = GoalClass.Mode.POS_CTRL
         self.mode_z_last_ = GoalClass.Mode.POS_CTRL
         
-        self.reset()
+        self.reset(state0, goal0)
 
-    def reset(self):
+    def reset(self, state0, goal0):
         if self.controller == 'coml':
             # Assume starting position, velocity, attitude, and angular velocity of 0
-            # q0 = np.zeros(3)
-            q0 = np.array([1, -1, 0])
-            dq0 = np.zeros(3)
-            R_flatten0 = np.eye(3).flatten()
-            Omega0 = np.zeros(3)
-            r0 = np.zeros(3)
-            dr0 = np.zeros(3)
+            q0 = state0.p
+            dq0 = state0.v
+            print(q0)
+            R_flatten0 = quaternion_to_rotation_matrix(state0.q).flatten()
+            Omega0 = state0.w
+            r0 = goal0.p
+            dr0 = goal0.v
+            print(r0)
             
             self.dA_prev, y0 = self.adaptation_law(q0, dq0, R_flatten0, Omega0, r0, dr0)
             self.pA_prev = np.zeros((q0.size, y0.size))

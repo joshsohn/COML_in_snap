@@ -15,13 +15,12 @@ from geometry_msgs.msg import Pose, Twist, Vector3
 from helpers import quat2yaw, saturate, simpleInterpolation, wrap, start_rosbag_recording, stop_rosbag_recording
 from snapstack_msgs.msg import State, Goal, QuadFlightMode, Wind, AttitudeCommand
 from structs import FlightMode
+from threading import Event
 
 class TrajectoryGenerator:
     def __init__(self):
         # Initialize the ROS node with the default name 'my_node_name' (will be overwritten by launch file)
         rospy.init_node('my_node_name')
-
-        self.rosbag_proc = start_rosbag_recording('-a')
 
         self.alt_ = rospy.get_param('~alt', default=None)
         self.freq = rospy.get_param('~pub_freq', default=None)
@@ -59,6 +58,8 @@ class TrajectoryGenerator:
 
         self.record = False
 
+        self.state_initialized = Event()
+
         # Subscribe and publish
         rospy.Subscriber('/globalflightmode', QuadFlightMode, self.mode_cb)
         rospy.Subscriber('state', State, self.state_cb)
@@ -68,7 +69,7 @@ class TrajectoryGenerator:
         self.pub_goal_ = rospy.Publisher('goal',Goal, queue_size=1)
         self.pub_wind_ = rospy.Publisher('wind',Wind, queue_size=1)
         
-        rospy.sleep(1.0)  # To ensure that the state has been received
+        self.state_initialized.wait()  # To ensure that the state has been received
 
         self.reset_goal()
         self.goal_.p.x = self.pose_.position.x
@@ -86,6 +87,8 @@ class TrajectoryGenerator:
         self.omega = np.zeros((self.num_traj, int(self.T/self.dt)+1, 3))
 
         rospy.loginfo("Successfully launched trajectory generator node.")
+
+        self.rosbag_proc = start_rosbag_recording('-a')
 
         # Spin to keep the node alive and process callbacks
         rospy.spin()
@@ -200,6 +203,9 @@ class TrajectoryGenerator:
         self.vel_.angular.x = msg.w.x
         self.vel_.angular.y = msg.w.y
         self.vel_.angular.z = msg.w.z
+
+        if not self.state_initialized.is_set():
+            self.state_initialized.set()
     
     def cmd_cb(self, msg):
         self.att_cmd_.F_W.x = msg.F_W.x
@@ -313,7 +319,7 @@ class TrajectoryGenerator:
 
         # Generate smooth trajectories
         self.T = 30
-        self.num_traj = 1
+        self.num_traj = 2
         num_knots = 6
         poly_orders = (9, 9, 9)
         deriv_orders = (4, 4, 4)

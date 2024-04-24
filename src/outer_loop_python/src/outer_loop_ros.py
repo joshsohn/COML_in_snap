@@ -7,6 +7,7 @@ from outer_loop import OuterLoop
 from structs import AttCmdClass, GoalClass, ModeClass, ParametersClass, StateClass
 from std_msgs.msg import Header
 from snapstack_msgs.msg import State, Goal, AttitudeCommand, ControlLog, QuadFlightMode
+from threading import Event
 
 class OuterLoopROS:
     def __init__(self):
@@ -31,11 +32,19 @@ class OuterLoopROS:
         self.statemsg_ = State()
         self.goalmsg_ = Goal()
 
-        self.olcntrl_ = OuterLoop(self.p)
+        self.state_initialized = Event()
+        self.goal_initialized = Event()
 
         # Subscribe and publish
         rospy.Subscriber('state', State, self.state_cb)
         rospy.Subscriber('goal', Goal, self.goal_cb)
+
+        rospy.loginfo("Waiting for the first state and goal messages...")
+        self.state_initialized.wait()
+        self.goal_initialized.wait()
+        rospy.loginfo("First state and goal messages received!")
+
+        self.olcntrl_ = OuterLoop(self.p, self.state_, self.goal_)
  
         self.pub_att_cmd_ = rospy.Publisher('attcmd', AttitudeCommand, queue_size=1)
         self.pub_log_ = rospy.Publisher('log',ControlLog, queue_size=1)
@@ -99,6 +108,9 @@ class OuterLoopROS:
         self.state_.q = quaternion_msg_to_quaternion(msg.quat)
         self.state_.w = vector_msg_to_array(msg.w)
 
+        if not self.state_initialized.is_set():
+            self.state_initialized.set()
+
     # goal callback function
     def goal_cb(self, msg):
         self.goalmsg_ = msg
@@ -112,6 +124,9 @@ class OuterLoopROS:
         self.goal_.dpsi = msg.dpsi
         self.goal_.mode_xy = GoalClass.Mode(msg.mode_xy)
         self.goal_.mode_z = GoalClass.Mode(msg.mode_z)
+
+        if not self.goal_initialized.is_set():
+            self.goal_initialized.set()
 
     # control callback function
     def cntrl_cb(self, event):
@@ -149,7 +164,7 @@ class OuterLoopROS:
                 cmd.w = np.zeros(3)
                 cmd.F_W = self.spinup_thrust_ * np.array([0.0, 0.0, 1.0])
             else:
-                self.olcntrl_.reset()
+                self.olcntrl_.reset(self.state_, self.goal_)
                 self.mode_ = ModeClass.Flying
                 rospy.logwarn_throttle(0.5, "Spinning up motors.")
 
