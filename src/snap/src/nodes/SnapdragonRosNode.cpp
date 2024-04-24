@@ -311,8 +311,8 @@ void Snapdragon::RosNode::SND::getParams(Snapdragon::ObserverManager::InitParams
   safeGetParam(nh_, "com", com);
 
   //Smc Params
-  SmcParams.Kr = Eigen::Vector3d(Kr[0], Kr[1], Kr[2])/1000.0;
-  SmcParams.Komega = Eigen::Vector3d(Komega[0], Komega[1], Komega[2])/1000.0;
+  SmcParams.Kr = Eigen::Vector3d(Kr[0], Kr[1], Kr[2]);
+  SmcParams.Komega = Eigen::Vector3d(Komega[0], Komega[1], Komega[2]);
   SmcParams.J = Eigen::Matrix3d(Eigen::Vector3d(Jdiag[0],  Jdiag[1], Jdiag[2]).asDiagonal()); 
   SmcParams.l = l;
   SmcParams.cd = cd;

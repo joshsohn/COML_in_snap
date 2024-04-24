@@ -21,6 +21,8 @@ class TrajectoryGenerator:
         # Initialize the ROS node with the default name 'my_node_name' (will be overwritten by launch file)
         rospy.init_node('my_node_name')
 
+        self.rosbag_proc = start_rosbag_recording('-a')
+
         self.alt_ = rospy.get_param('~alt', default=None)
         self.freq = rospy.get_param('~pub_freq', default=None)
         self.dt_ = 1.0 / self.freq
@@ -85,8 +87,6 @@ class TrajectoryGenerator:
 
         rospy.loginfo("Successfully launched trajectory generator node.")
 
-        self.take_off()
-
         # Spin to keep the node alive and process callbacks
         rospy.spin()
 
@@ -144,7 +144,30 @@ class TrajectoryGenerator:
             self.reset_goal()
             stop_rosbag_recording(self.rosbag_proc)
             rospy.loginfo("Motors killed, switched to GROUND mode.")
-            return  
+            return
+        elif self.flight_mode_ == FlightMode.GROUND and msg.mode == msg.GO:
+            self.take_off()
+        elif self.flight_mode_ == FlightMode.HOVERING and msg.mode == msg.GO:
+            self.traj_goals = self.traj_goals_full_
+            # self.index_msgs = self.index_msgs_full
+            self.flight_mode_ = FlightMode.INIT_POS_TRAJ
+            rospy.loginfo("Going to the initial position of the generated trajectory...")
+        elif self.flight_mode_ == FlightMode.INIT_POS_TRAJ and msg.mode == msg.GO:
+            # Start following the generated trajectory if close to the init pos (in 2D)
+            dist_to_init = math.sqrt(pow(self.traj_goals_[0].p.x - self.pose_.position.x, 2) +
+                                    pow(self.traj_goals_[0].p.y - self.pose_.position.y, 2) +
+                                    pow(self.traj_goals_[0].p.z - self.pose_.position.z, 2))
+            delta_yaw = self.traj_goals_[0].psi - quat2yaw(self.pose_.orientation)
+            delta_yaw = wrap(delta_yaw)
+            if dist_to_init > self.dist_thresh_ or abs(delta_yaw) > self.yaw_thresh_:
+                rospy.loginfo("Can't switch to the generated trajectory following mode, too far from the init pos")
+                return
+            self.pub_index_ = 0
+            self.flight_mode_ = FlightMode.TRAJ_FOLLOWING
+            # Start wind
+            self.wind_ = self.winds_full_[self.index]
+            self.record = True
+            rospy.loginfo(f"Following trajectory {self.index+1}...")
         elif self.flight_mode_ == FlightMode.INIT_POS_TRAJ and msg.mode == msg.LAND:
             # Change mode to hover wherever the robot was when we clicked "END"
             # Need to send a current goal with 0 vel bc we could be moving to the init pos of traj
@@ -159,7 +182,7 @@ class TrajectoryGenerator:
             rospy.loginfo("Switched to HOVERING mode")
         # elif self.flight_mode_ == FlightMode.TRAJ_FOLLOWING and msg.mode == msg.LAND:
         #     # Generate a braking trajectory. Then, we will automatically switch to hover when done
-        #     self.traj_.generateStopTraj(self.traj_goals_, self.index_msgs_, self.pub_index_)
+        #     self.generate_stop_traj(self.traj_goals_, self.index_msgs_, self.pub_index_)
         elif self.flight_mode_ == FlightMode.HOVERING and msg.mode == msg.LAND:
             # go to the initial position
             self.flight_mode_ = FlightMode.INIT_POS
@@ -207,7 +230,6 @@ class TrajectoryGenerator:
                 self.traj_goals_ = self.traj_goals_full_[self.index]
                 # self.index_msgs_ = self.index_msgs_full_
                 self.flight_mode_ = FlightMode.INIT_POS_TRAJ
-                self.rosbag_proc = start_rosbag_recording('-a')
                 print(f"Take off completed, going to the initial position of trajectory {self.index+1}...")
             else:
                 # Increment the z cmd each timestep for a smooth takeoff.
@@ -220,22 +242,6 @@ class TrajectoryGenerator:
             self.goal_, finished = simpleInterpolation(self.goal_, self.traj_goals_[0], self.traj_goals_[0].psi, 
                 self.vel_initpos_, self.vel_yaw_, self.dist_thresh_, 
                 self.yaw_thresh_, self.dt_, finished)
-            if finished:
-                # Start following the generated trajectory if close to the init pos (in 2D)
-                dist_to_init = math.sqrt(pow(self.traj_goals_[0].p.x - self.pose_.position.x, 2) +
-                                        pow(self.traj_goals_[0].p.y - self.pose_.position.y, 2) +
-                                        pow(self.traj_goals_[0].p.z - self.pose_.position.z, 2))
-                delta_yaw = self.traj_goals_[0].psi - quat2yaw(self.pose_.orientation)
-                delta_yaw = wrap(delta_yaw)
-                if dist_to_init > self.dist_thresh_ or abs(delta_yaw) > self.yaw_thresh_:
-                    rospy.loginfo("Can't switch to the generated trajectory following mode, too far from the init pos")
-                    return
-                self.pub_index_ = 0
-                self.flight_mode_ = FlightMode.TRAJ_FOLLOWING
-                # Start wind
-                self.wind_ = self.winds_full_[self.index]
-                self.record = True
-                rospy.loginfo(f"Following trajectory {self.index+1}...")
 
         # follow trajectory
         elif self.flight_mode_ == FlightMode.TRAJ_FOLLOWING:
@@ -435,7 +441,7 @@ class TrajectoryGenerator:
         # unit_vector = random_vector/np.linalg.norm(random_vector)
         # wind_vector = unit_vector*w
         # wind.w_nominal.x = 0
-        wind.w_nominal.x = w
+        wind.w_nominal.x = 5*w
         wind.w_nominal.y = 0
         wind.w_nominal.z = 0
         wind.w_gust.x = 0
@@ -447,8 +453,8 @@ class TrajectoryGenerator:
     def reset_goal(self):
         # Creating a new goal message should already set this correctly, but just in case
         # Exception: yaw would be 0 instead of current yaw
-        self.goal_.p.x, self.goal_.p.y, self.goal_.p.z = 0, 0, 0
-        self.goal_.v.x, self.goal_.v.y, self.goal_.v.z = 0, 0, 0
+        self.goal_.p.x, self.goal_.p.y, self.goal_.p.z = self.pose_.position.x, self.pose_.position.y, self.pose_.position.z
+        self.goal_.v.x, self.goal_.v.y, self.goal_.v.z = self.vel_.linear.x, self.vel_.linear.y, self.vel_.linear.z
         self.goal_.a.x, self.goal_.a.y, self.goal_.a.z = 0, 0, 0
         self.goal_.j.x, self.goal_.j.y, self.goal_.j.z = 0, 0, 0
         #self.goal_.s.x, self.goal_.s.y, self.goal_.s.z = 0, 0, 0

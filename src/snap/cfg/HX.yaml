@@ -1,8 +1,26 @@
 # PD gains (/1000)
-#Kr: [4250, 4250, 300]     # TODO: Andrea: double check these gains (and yaw especially)
-#Komega: [1120, 1120, 230]  # TODO: Andrea: double check gains (yaw)
-Kr: [1400.0, 1400.0, 1260.0]
-Komega: [330.0, 330.0, 300.0]
+# Kr: [4.250, 4.250, 0.300]     # TODO: Andrea: double check these gains (and yaw especially)
+# Komega: [0.33, 0.330, 0.3]
+
+# COML gains
+# Kr: [1.4167006, 1.4167007, 1.2432994]
+# Komega: [0.31329942, 0.31329927, 0.3167005]
+# reg_P = 2e-3
+Kr: [1.4608141, 1.4634925, 1.3040215]
+Komega: [0.26908523, 0.26745802, 0.255641]
+# reg_P = 2e-3, 4000 epochs
+# Kr: [1.4658012, 1.474727, 1.2998285]
+# Komega: [0.2635862, 0.2546284, 0.25950631]
+# reg_P = 1e-1
+# Kr: [1.4608238, 1.4635066, 1.3040249]
+# Komega: [0.2690729, 0.2674357, 0.2556409]
+# reg_P = 5e-1, k_R_scale = 3, reg_k_R = 2e-3
+# Kr: [4.975198, 3.7309325, 0.76345205]
+# Komega: [0.32272032, 0.17799775, 0.35882324]
+# reg_P = 2e-3, k_R_scale = 1.5
+# Kr: [3.8966405, 3.612157, 1.5867646]
+# Komega: [0.17412022, 0.2033396, 0.37206557]
+
 
 # Inertia, in kg·(m^2) 
 #Jdiag: [0.03, 0.03, 0.09] #//Diagonal elements of the inertia matrix in body frame

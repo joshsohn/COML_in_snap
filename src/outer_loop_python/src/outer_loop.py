@@ -32,8 +32,16 @@ class OuterLoop:
         if self.controller == 'coml':
             rospack = rospkg.RosPack()
             package_path = rospack.get_path('outer_loop_python')
-            trial_name = 'reg_P_5000_constant_Kr'
-            filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=5000.0000.pkl'
+            # trial_name = 'reg_P_1e-1_reg_k_R_0'
+            # filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.1000.pkl'
+            trial_name = 'reg_P_2e-3_reg_k_R_0'
+            filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.0020.pkl'
+            # trial_name = 'reg_P_5e-1_reg_k_R_2e-3_k_R_scale_3'
+            # filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.5000.pkl'
+            # trial_name = 'reg_P_2e-3_reg_k_R_0_epochs_4000'
+            # filename = 'seed=0_M=50_E=4000_pinit=2.00_pfreq=2000_regP=0.0020.pkl'
+            # trial_name = 'reg_P_2e-3_reg_k_R_0_k_R_scale_1.5'
+            # filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.0020.pkl'
 
             model_dir = f'{package_path}/models/{trial_name}'
             model_pkl_loc = os.path.join(model_dir, filename)
@@ -69,7 +77,8 @@ class OuterLoop:
     def reset(self):
         if self.controller == 'coml':
             # Assume starting position, velocity, attitude, and angular velocity of 0
-            q0 = np.zeros(3)
+            # q0 = np.zeros(3)
+            q0 = np.array([1, -1, 0])
             dq0 = np.zeros(3)
             R_flatten0 = np.eye(3).flatten()
             Omega0 = np.zeros(3)
@@ -77,7 +86,7 @@ class OuterLoop:
             dr0 = np.zeros(3)
             
             self.dA_prev, y0 = self.adaptation_law(q0, dq0, R_flatten0, Omega0, r0, dr0)
-            self.pA_prev = np.ones((q0.size, y0.size))
+            self.pA_prev = np.zeros((q0.size, y0.size))
             
         self.Ix_.reset()
         self.Iy_.reset()
