@@ -23,7 +23,7 @@ class TrajectoryGenerator:
         rospy.init_node('my_node_name')
 
         self.wind_off = True
-        self.traj_type = 'circle'
+        self.traj_type = 'spline'
 
         self.alt_ = rospy.get_param('~alt', default=None)
         self.freq = rospy.get_param('~pub_freq', default=None)
