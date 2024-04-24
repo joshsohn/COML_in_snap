@@ -22,6 +22,9 @@ class TrajectoryGenerator:
         # Initialize the ROS node with the default name 'my_node_name' (will be overwritten by launch file)
         rospy.init_node('my_node_name')
 
+        self.wind_off = True
+        self.traj_type = 'circle'
+
         self.alt_ = rospy.get_param('~alt', default=None)
         self.freq = rospy.get_param('~pub_freq', default=None)
         self.dt_ = 1.0 / self.freq
@@ -46,7 +49,7 @@ class TrajectoryGenerator:
         self.zmax_ = rospy.get_param("~/room_bounds/z_max")
         
         self.num_traj = 2
-        self.T = 30
+        self.T = 10
         self.dt = 0.01
         self.seed = 0
         self.key = jax.random.PRNGKey(self.seed)
@@ -59,7 +62,7 @@ class TrajectoryGenerator:
         self.pose_ = Pose()
         self.vel_ = Twist()
         self.goal_ = Goal()
-        self.init_pos_ = Vector3()
+        self.init_pos_ = Goal()
         self.wind_ = Wind()
         self.att_cmd_ = AttitudeCommand()
 
@@ -112,14 +115,14 @@ class TrajectoryGenerator:
             return
 
         # Takeoff initializations
-        self.init_pos_.x = self.pose_.position.x
-        self.init_pos_.y = self.pose_.position.y
-        self.init_pos_.z = self.pose_.position.z
+        self.init_pos_.p.x = self.pose_.position.x
+        self.init_pos_.p.y = self.pose_.position.y
+        self.init_pos_.p.z = self.pose_.position.z
         # set the goal to our current position + yaw
         self.reset_goal()
-        self.goal_.p.x = self.init_pos_.x
-        self.goal_.p.y = self.init_pos_.y
-        self.goal_.p.z = self.init_pos_.z
+        self.goal_.p.x = self.init_pos_.p.x
+        self.goal_.p.y = self.init_pos_.p.y
+        self.goal_.p.z = self.init_pos_.p.z
         self.goal_.psi = quat2yaw(self.pose_.orientation)
 
         self.reset_wind()
@@ -159,7 +162,7 @@ class TrajectoryGenerator:
             self.take_off()
         elif self.flight_mode_ == FlightMode.HOVERING and msg.mode == msg.GO:
             self.traj_goals_ = self.traj_goals_full_[self.index]
-            self.wind_ = self.winds_full_[self.index]
+            # self.wind_ = self.winds_full_[self.index]
             self.flight_mode_ = FlightMode.INIT_POS_TRAJ
             print(f"Going to the initial position of trajectory {self.index+1}...")
         elif self.flight_mode_ == FlightMode.INIT_POS_TRAJ and msg.mode == msg.GO:
@@ -175,6 +178,7 @@ class TrajectoryGenerator:
             self.pub_index_ = 0
             self.flight_mode_ = FlightMode.TRAJ_FOLLOWING
             # Start wind
+            self.wind_ = self.winds_full_[self.index]
             self.record = True
             rospy.loginfo(f"Following trajectory {self.index+1}...")
         elif self.flight_mode_ == FlightMode.INIT_POS_TRAJ and msg.mode == msg.LAND:
@@ -262,11 +266,15 @@ class TrajectoryGenerator:
             if self.pub_index_ == len(self.traj_goals_):
                 self.index += 1
                 if self.index == len(self.traj_goals_full_):
-                    self.flight_mode_ = FlightMode.LANDING
-                    self.reset_wind()
-                    self.record = False
-                    # self.publish_data()
-                    print("Landing...")
+                    self.reset_goal()
+                    self.goal_.p.x = self.pose_.position.x
+                    self.goal_.p.y = self.pose_.position.y
+                    self.goal_.p.z = self.alt_
+                    self.goal_.psi = quat2yaw(self.pose_.orientation)
+                    self.goal_.header.stamp = rospy.Time.now()
+                    self.pub_goal_.publish(self.goal_)
+                    self.flight_mode_ = FlightMode.HOVERING
+                    rospy.loginfo("All trajectories completed, switched to HOVERING mode")
                     return
                 self.traj_goals_ = self.traj_goals_full_[self.index]
                 self.reset_wind()
@@ -280,7 +288,7 @@ class TrajectoryGenerator:
             # Go to init_pos_ but with altitude alt_ and current yaw
             finished = False
             dest = self.init_pos_
-            dest.z = self.alt_
+            dest.p.z = self.alt_
             self.goal_, finished = simpleInterpolation(self.goal_, dest, self.goal_.psi, self.vel_initpos_,
                                             self.vel_yaw_, self.dist_thresh_, self.yaw_thresh_,
                                             self.dt_, finished)
@@ -293,7 +301,7 @@ class TrajectoryGenerator:
         # The goal was already set to our current position + yaw when hovering
         elif self.flight_mode_ == FlightMode.LANDING:
             # Choose between fast and slow landing
-            vel_land = self.vel_land_fast_ if self.pose_.position.z > (self.init_pos_.z + 0.4) else self.vel_land_slow_
+            vel_land = self.vel_land_fast_ if self.pose_.position.z > (self.init_pos_.p.z + 0.4) else self.vel_land_slow_
             self.goal_.p.z -= vel_land * self.dt_
 
             if self.goal_.p.z < 0:  # Don't use init alt here. It's safer to try to land to the ground
@@ -315,18 +323,18 @@ class TrajectoryGenerator:
         self.pub_wind_.publish(self.wind_)
         self.pub_goal_.publish(self.goal_)
     
-    def generate_trajectory(self, trajectory_type='circle'):
+    def generate_trajectory(self):
         print("Generating trajectories...")
-        if trajectory_type == 'spline':
+        if self.traj_type == 'spline':
             spline_traj = Spline(self.num_traj, self.T, self.dt, self.key, self.xmin_, self.ymin_, self.zmin_, self.xmax_, self.ymax_, self.zmax_)
             all_goals = spline_traj.generate_all_trajectories()
-        if trajectory_type == 'point':
+        if self.traj_type == 'point':
             points = [
                 np.array([1, 1, 1]),
             ]
             point_traj = Point(points)
             all_goals = point_traj.generate_all_trajectories()
-        if trajectory_type == 'circle':
+        if self.traj_type == 'circle':
             radius = 2.0
             center_x = 0.0
             center_y = 0.0
@@ -338,7 +346,7 @@ class TrajectoryGenerator:
         return all_goals
 
     def generate_wind(self): 
-        wind_sim = WindSim(self.key, self.num_traj)
+        wind_sim = WindSim(self.key, self.num_traj, self.wind_off)
         all_winds = wind_sim.generate_all_winds()
         
         return all_winds
