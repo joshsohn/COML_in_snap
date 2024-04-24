@@ -79,12 +79,10 @@ class OuterLoop:
             # Assume starting position, velocity, attitude, and angular velocity of 0
             q0 = state0.p
             dq0 = state0.v
-            print(q0)
             R_flatten0 = quaternion_to_rotation_matrix(state0.q).flatten()
             Omega0 = state0.w
             r0 = goal0.p
             dr0 = goal0.v
-            print(r0)
             
             self.dA_prev, y0 = self.adaptation_law(q0, dq0, R_flatten0, Omega0, r0, dr0)
             self.pA_prev = np.zeros((q0.size, y0.size))

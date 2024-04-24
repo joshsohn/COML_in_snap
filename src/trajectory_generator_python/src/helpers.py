@@ -73,16 +73,16 @@ def simpleInterpolation(current, dest_pos, dest_yaw, vel, vel_yaw,
     return goal, finished
 
 def start_rosbag_recording(topic_name):
-    print('Starting rosbag recording!')
     rospack = rospkg.RosPack()
     package_path = rospack.get_path('outer_loop_python')
     # Define the command to start rosbag recording
-    command = ['rosbag', 'record', '-o', f'{package_path}/rosbags/', topic_name]
+    command = ['rosbag', 'record', '-q', '-o', f'{package_path}/rosbags/', topic_name]
     # Start recording
     rosbag_proc = subprocess.Popen(command)
+    print('Started rosbag recording!')
     return rosbag_proc
 
 def stop_rosbag_recording(rosbag_proc):
-    print('Stopping rosbag recording!')
     # Terminate the rosbag recording process
     rosbag_proc.send_signal(subprocess.signal.SIGINT)
+    print('Stopped rosbag recording!')
