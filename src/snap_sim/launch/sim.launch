@@ -23,9 +23,9 @@
   <arg name="wx_nominal" default="0.0" />
   <arg name="wy_nominal" default="0.0" />
   <arg name="wz_nominal" default="0.0" />
-  <arg name="wx_gust_bound" default="0.0" />
-  <arg name="wy_gust_bound" default="0.0" />
-  <arg name="wz_gust_bound" default="0.0" />
+  <arg name="wx_gust_bound" default="10.0" />
+  <arg name="wy_gust_bound" default="10.0" />
+  <arg name="wz_gust_bound" default="10.0" />
     
   <group ns="$(arg veh)$(arg num)s">
 

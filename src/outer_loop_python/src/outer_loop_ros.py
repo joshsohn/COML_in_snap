@@ -11,8 +11,7 @@ from threading import Event
 
 class OuterLoopROS:
     def __init__(self):
-        # Initialize the ROS node with the default name 'my_node_name' (will be overwritten by launch file)
-        rospy.init_node('my_node_name')
+        self.controller = 'coml' # pid or coml
 
         self.control_dt_ = 0.0
         self.Tspinup_ = 0.0
@@ -44,7 +43,7 @@ class OuterLoopROS:
         self.goal_initialized.wait()
         rospy.loginfo("First state and goal messages received!")
 
-        self.olcntrl_ = OuterLoop(self.p, self.state_, self.goal_)
+        self.olcntrl_ = OuterLoop(self.p, self.state_, self.goal_, self.controller)
  
         self.pub_att_cmd_ = rospy.Publisher('attcmd', AttitudeCommand, queue_size=1)
         self.pub_log_ = rospy.Publisher('log',ControlLog, queue_size=1)
@@ -100,6 +99,8 @@ class OuterLoopROS:
 
     # state callback function
     def state_cb(self, msg):
+        rospy.loginfo('State Callback')
+        
         self.statemsg_ = msg
 
         self.state_.t = msg.header.stamp.to_sec()
@@ -269,6 +270,8 @@ class OuterLoopROS:
         return True
 
 def main():
+    # Initialize the ROS node with the default name 'my_node_name' (will be overwritten by launch file)
+    rospy.init_node('my_node_name')
     OuterLoopROS()
 
 if __name__ == '__main__':

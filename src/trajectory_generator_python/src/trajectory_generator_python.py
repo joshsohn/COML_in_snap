@@ -19,11 +19,12 @@ from wind import WindSim
 
 class TrajectoryGenerator:
     def __init__(self):
-        # Initialize the ROS node with the default name 'my_node_name' (will be overwritten by launch file)
-        rospy.init_node('my_node_name')
-
         self.wind_off = True
-        self.traj_type = 'spline'
+        self.traj_type = 'point' # spline, point, circle
+        self.num_traj = 1
+        self.T = 20
+        self.seed = 0
+        self.key = jax.random.PRNGKey(self.seed)
 
         self.alt_ = rospy.get_param('~alt', default=None)
         self.freq = rospy.get_param('~pub_freq', default=None)
@@ -47,12 +48,6 @@ class TrajectoryGenerator:
         self.ymax_ = rospy.get_param("~/room_bounds/y_max")
         self.zmin_ = rospy.get_param("~/room_bounds/z_min")
         self.zmax_ = rospy.get_param("~/room_bounds/z_max")
-        
-        self.num_traj = 2
-        self.T = 10
-        self.dt = 0.01
-        self.seed = 0
-        self.key = jax.random.PRNGKey(self.seed)
 
         self.traj_goals_full_ = self.generate_trajectory()
         self.winds_full_ = self.generate_wind()
@@ -88,20 +83,17 @@ class TrajectoryGenerator:
 
         self.reset_wind()
 
-        self.q = np.zeros((self.num_traj, int(self.T/self.dt)+1, 3))
-        self.dq = np.zeros((self.num_traj, int(self.T/self.dt)+1, 3))
-        self.u = np.zeros((self.num_traj, int(self.T/self.dt)+1, 3))
-        self.r = np.zeros((self.num_traj, int(self.T/self.dt)+1, 3))
-        self.dr = np.zeros((self.num_traj, int(self.T/self.dt)+1, 3))
-        self.quat = np.zeros((self.num_traj, int(self.T/self.dt)+1, 4))
-        self.omega = np.zeros((self.num_traj, int(self.T/self.dt)+1, 3))
+        self.q = np.zeros((self.num_traj, int(self.T/self.dt_)+1, 3))
+        self.dq = np.zeros((self.num_traj, int(self.T/self.dt_)+1, 3))
+        self.u = np.zeros((self.num_traj, int(self.T/self.dt_)+1, 3))
+        self.r = np.zeros((self.num_traj, int(self.T/self.dt_)+1, 3))
+        self.dr = np.zeros((self.num_traj, int(self.T/self.dt_)+1, 3))
+        self.quat = np.zeros((self.num_traj, int(self.T/self.dt_)+1, 4))
+        self.omega = np.zeros((self.num_traj, int(self.T/self.dt_)+1, 3))
 
         rospy.loginfo("Successfully launched trajectory generator node.")
 
         self.rosbag_proc = start_rosbag_recording('-a')
-
-        # Spin to keep the node alive and process callbacks
-        rospy.spin()
 
     def take_off(self):
         # Check inside safety bounds, and don't let the takeoff happen if outside them
@@ -293,7 +285,7 @@ class TrajectoryGenerator:
                                             self.vel_yaw_, self.dist_thresh_, self.yaw_thresh_,
                                             self.dt_, finished)
             if finished:  # land when close to the init pos
-                self.reset_wind()
+                # self.reset_wind()
                 self.flight_mode_ = FlightMode.LANDING
                 print("Landing...")
 
@@ -326,7 +318,7 @@ class TrajectoryGenerator:
     def generate_trajectory(self):
         print("Generating trajectories...")
         if self.traj_type == 'spline':
-            spline_traj = Spline(self.num_traj, self.T, self.dt, self.key, self.xmin_, self.ymin_, self.zmin_, self.xmax_, self.ymax_, self.zmax_)
+            spline_traj = Spline(self.num_traj, self.T, self.dt_, self.key, self.xmin_, self.ymin_, self.zmin_, self.xmax_, self.ymax_, self.zmax_)
             all_goals = spline_traj.generate_all_trajectories()
         if self.traj_type == 'point':
             points = [
@@ -340,9 +332,9 @@ class TrajectoryGenerator:
             center_y = 0.0
             alt = 1.0
 
-            circle_traj = Circle(self.T, self.dt, radius, center_x, center_y, alt)
+            circle_traj = Circle(self.T, self.dt_, radius, center_x, center_y, alt)
             all_goals = circle_traj.generate_all_trajectories()
-
+        print("Finished generating trajectories...")
         return all_goals
 
     def generate_wind(self): 
@@ -410,7 +402,11 @@ class TrajectoryGenerator:
     #         pickle.dump(data, file)
 
 def main():
+    # Initialize the ROS node with the default name 'my_node_name' (will be overwritten by launch file)
+    rospy.init_node('my_node_name')
     TrajectoryGenerator()
+    # Spin to keep the node alive and process callbacks
+    rospy.spin()
 
 if __name__ == '__main__':
     try:

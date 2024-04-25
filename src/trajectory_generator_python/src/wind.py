@@ -2,21 +2,6 @@ from snapstack_msgs.msg import Wind
 import jax
 import jax.numpy as jnp
 
-def create_wind(w):
-    wind = Wind()
-    # random_vector = np.random.randn(3)
-    # unit_vector = random_vector/np.linalg.norm(random_vector)
-    # wind_vector = unit_vector*w
-    # wind.w_nominal.x = 0
-    wind.w_nominal.x = 5*w
-    wind.w_nominal.y = 5*w
-    wind.w_nominal.z = 5*w
-    wind.w_gust.x = w
-    wind.w_gust.y = w
-    wind.w_gust.z = w
-
-    return wind
-
 class WindSim():
     def __init__(self, key, num_traj, off=False):
         self.key = key
@@ -32,10 +17,30 @@ class WindSim():
             self.b = 9.      # shape parameter `b` for beta distribution
             self.key, subkey = jax.random.split(self.key, 2)
             self.w = self.w_min + (self.w_max - self.w_min)*jax.random.beta(subkey, self.a, self.b, (self.num_traj,))
+    
+    def create_wind(self, w):
+        wind = Wind()
+        # wind.w_nominal.x = w*5
+
+        random_vector = jax.random.normal(self.key, (3,))
+        unit_vector = random_vector/jnp.linalg.norm(random_vector)
+        w_nominal_vector = w*unit_vector
+        wind.w_nominal.x = w_nominal_vector[0]*5
+        wind.w_nominal.y = w_nominal_vector[1]*5
+        wind.w_nominal.z = w_nominal_vector[2]*5
+        
+        random_vector = jax.random.normal(self.key, (3,))
+        unit_vector = random_vector/jnp.linalg.norm(random_vector)
+        w_gust_vector = w*unit_vector
+        wind.w_gust.x = w_gust_vector[0]
+        wind.w_gust.y = w_gust_vector[1]
+        wind.w_gust.z = w_gust_vector[2]
+
+        return wind
 
     def generate_all_winds(self):
         all_winds = []
         for i in range(self.num_traj):
-            all_winds.append(create_wind(self.w[i]))
+            all_winds.append(self.create_wind(self.w[i]))
         
         return all_winds
