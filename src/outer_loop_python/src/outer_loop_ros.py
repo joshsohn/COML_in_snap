@@ -98,9 +98,7 @@ class OuterLoopROS:
         return p
 
     # state callback function
-    def state_cb(self, msg):
-        rospy.loginfo('State Callback')
-        
+    def state_cb(self, msg):      
         self.statemsg_ = msg
 
         self.state_.t = msg.header.stamp.to_sec()

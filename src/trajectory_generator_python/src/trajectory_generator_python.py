@@ -19,9 +19,11 @@ from wind import WindSim
 
 class TrajectoryGenerator:
     def __init__(self):
-        self.wind_off = True
-        self.traj_type = 'point' # spline, point, circle
+        self.traj_type = 'spline' # spline, point, circle
+        self.auto = True # if finished, automatically switch to traj following mode?
+        self.wind_off = False
         self.num_traj = 1
+
         self.T = 20
         self.seed = 0
         self.key = jax.random.PRNGKey(self.seed)
@@ -94,6 +96,9 @@ class TrajectoryGenerator:
         rospy.loginfo("Successfully launched trajectory generator node.")
 
         self.rosbag_proc = start_rosbag_recording('-a')
+
+        if self.auto:
+            self.take_off()
 
     def take_off(self):
         # Check inside safety bounds, and don't let the takeoff happen if outside them
@@ -235,7 +240,11 @@ class TrajectoryGenerator:
             takeoff_alt = self.alt_  # Don't add init alt bc the traj is generated with z = alt_
             # If close to the takeoff_alt, switch to HOVERING
             if abs(takeoff_alt - self.pose_.position.z) < 0.10 and self.goal_.p.z >= takeoff_alt:
-                self.flight_mode_ = FlightMode.HOVERING
+                if self.auto:
+                    self.traj_goals_ = self.traj_goals_full_[self.index]
+                    self.flight_mode_ = FlightMode.INIT_POS_TRAJ
+                else:
+                    self.flight_mode_ = FlightMode.HOVERING
                 print(f"Take off completed")
             else:
                 # Increment the z cmd each timestep for a smooth takeoff.
@@ -248,6 +257,22 @@ class TrajectoryGenerator:
             self.goal_, finished = simpleInterpolation(self.goal_, self.traj_goals_[0], self.traj_goals_[0].psi, 
                 self.vel_initpos_, self.vel_yaw_, self.dist_thresh_, 
                 self.yaw_thresh_, self.dt_, finished)
+            if (self.auto) and finished: 
+                    # Start following the generated trajectory if close to the init pos (in 2D)
+                dist_to_init = math.sqrt(pow(self.traj_goals_[0].p.x - self.pose_.position.x, 2) +
+                                        pow(self.traj_goals_[0].p.y - self.pose_.position.y, 2) +
+                                        pow(self.traj_goals_[0].p.z - self.pose_.position.z, 2))
+                delta_yaw = self.traj_goals_[0].psi - quat2yaw(self.pose_.orientation)
+                delta_yaw = wrap(delta_yaw)
+                if dist_to_init > self.dist_thresh_ or abs(delta_yaw) > self.yaw_thresh_:
+                    rospy.loginfo("Can't switch to the generated trajectory following mode, too far from the init pos")
+                    return
+                self.pub_index_ = 0
+                self.flight_mode_ = FlightMode.TRAJ_FOLLOWING
+                # Start wind
+                self.wind_ = self.winds_full_[self.index]
+                self.record = True
+                rospy.loginfo(f"Following trajectory {self.index+1}...")
 
         # follow trajectory
         elif self.flight_mode_ == FlightMode.TRAJ_FOLLOWING:
@@ -258,16 +283,25 @@ class TrajectoryGenerator:
             if self.pub_index_ == len(self.traj_goals_):
                 self.index += 1
                 if self.index == len(self.traj_goals_full_):
-                    self.reset_goal()
-                    self.goal_.p.x = self.pose_.position.x
-                    self.goal_.p.y = self.pose_.position.y
-                    self.goal_.p.z = self.alt_
-                    self.goal_.psi = quat2yaw(self.pose_.orientation)
-                    self.goal_.header.stamp = rospy.Time.now()
-                    self.pub_goal_.publish(self.goal_)
-                    self.flight_mode_ = FlightMode.HOVERING
-                    rospy.loginfo("All trajectories completed, switched to HOVERING mode")
-                    return
+                    if self.auto:
+                        self.flight_mode_ = FlightMode.LANDING
+                        self.reset_wind()
+                        self.record = False
+                        # self.publish_data()
+                        stop_rosbag_recording(self.rosbag_proc)
+                        print("Landing...")
+                        return
+                    else:
+                        self.reset_goal()
+                        self.goal_.p.x = self.pose_.position.x
+                        self.goal_.p.y = self.pose_.position.y
+                        self.goal_.p.z = self.alt_
+                        self.goal_.psi = quat2yaw(self.pose_.orientation)
+                        self.goal_.header.stamp = rospy.Time.now()
+                        self.pub_goal_.publish(self.goal_)
+                        self.flight_mode_ = FlightMode.HOVERING
+                        rospy.loginfo("All trajectories completed, switched to HOVERING mode")
+                        return
                 self.traj_goals_ = self.traj_goals_full_[self.index]
                 self.reset_wind()
                 self.record = False
@@ -287,6 +321,7 @@ class TrajectoryGenerator:
             if finished:  # land when close to the init pos
                 # self.reset_wind()
                 self.flight_mode_ = FlightMode.LANDING
+                stop_rosbag_recording(self.rosbag_proc)
                 print("Landing...")
 
         # If landing, decrease alt until we reach ground (and switch to ground)
@@ -300,7 +335,6 @@ class TrajectoryGenerator:
                 # Landed, kill motors
                 self.goal_.power = False
                 self.flight_mode_ = FlightMode.GROUND
-                stop_rosbag_recording(self.rosbag_proc)
                 print("Landed")
 
         # Apply safety bounds

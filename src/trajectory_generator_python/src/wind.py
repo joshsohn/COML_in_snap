@@ -11,8 +11,8 @@ class WindSim():
             self.w = jnp.zeros((self.num_traj,))
         else:
             # Sample wind velocities from the training distribution
-            self.w_min = 0.  # minimum wind velocity in inertial `x`-direction
-            self.w_max = 6.  # maximum wind velocity in inertial `x`-direction
+            self.w_min = 0.  # minimum wind velocity
+            self.w_max = 12.  # maximum wind velocity
             self.a = 5.      # shape parameter `a` for beta distribution
             self.b = 9.      # shape parameter `b` for beta distribution
             self.key, subkey = jax.random.split(self.key, 2)
@@ -20,14 +20,12 @@ class WindSim():
     
     def create_wind(self, w):
         wind = Wind()
-        # wind.w_nominal.x = w*5
-
         random_vector = jax.random.normal(self.key, (3,))
         unit_vector = random_vector/jnp.linalg.norm(random_vector)
         w_nominal_vector = w*unit_vector
-        wind.w_nominal.x = w_nominal_vector[0]*5
-        wind.w_nominal.y = w_nominal_vector[1]*5
-        wind.w_nominal.z = w_nominal_vector[2]*5
+        wind.w_nominal.x = w_nominal_vector[0]*3
+        wind.w_nominal.y = w_nominal_vector[1]*3
+        wind.w_nominal.z = w_nominal_vector[2]*3
         
         random_vector = jax.random.normal(self.key, (3,))
         unit_vector = random_vector/jnp.linalg.norm(random_vector)
