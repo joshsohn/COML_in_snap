@@ -141,6 +141,17 @@ class Point():
     
 class Circle():
     def __init__(self, T, dt, radius, center_x, center_y, alt):
+        """
+        Initializes parameters for generating a circular trajectory.
+
+        Parameters:
+        - T (float): Total period of the circle in time units, defining how long it takes to complete one full revolution.
+        - dt (float): Time step for trajectory sampling, determining the resolution of the trajectory data.
+        - radius (float): Radius of the circle, specifying the distance from the center to any point on the circle.
+        - center_x (float): X-coordinate of the circle's center, defining the horizontal position of the circle.
+        - center_y (float): Y-coordinate of the circle's center, defining the vertical position of the circle.
+        - alt (float): Altitude or constant z-coordinate for the trajectory, maintaining a fixed elevation throughout.
+        """
         self.T = T
         self.dt = dt
         self.radius = radius
@@ -191,4 +202,69 @@ class Circle():
                 goal_i.append(create_goal(r_i, dr_i, ddr_i))
             all_goals.append(goal_i)
         return all_goals
+
+class FigureEight():
+    def __init__(self, T, dt, a, b, center_x, center_y, alt):
+        """
+        Initialize the parameters for the figure-eight trajectory.
+
+        Parameters:
+        - T (float): Total time of the trajectory.
+        - dt (float): Time step for the trajectory points.
+        - a (float): Semi-major axis (x-axis direction amplitude).
+        - b (float): Semi-minor axis (y-axis direction amplitude).
+        - center_x (float): x-coordinate of the center of the trajectory.
+        - center_y (float): y-coordinate of the center of the trajectory.
+        - alt (float): Constant altitude of the trajectory.
+        """
+        self.T = T
+        self.dt = dt
+        self.a = a
+        self.b = b
+        self.center_x = center_x
+        self.center_y = center_y
+        self.alt = alt
+
+        self.num_traj = 1
+
+        self.r, self.dr, self.ddr = self.populate_figure_eight_trajectory()
+    
+    def populate_figure_eight_trajectory(self):
+        # Angular velocity
+        omega = 2 * jnp.pi / self.T
+
+        # Time array
+        t = jnp.arange(0, self.T + self.dt, self.dt)
         
+        # Angular positions
+        theta = omega * t
+
+        # Position calculations for figure-eight
+        x = self.center_x + self.a * jnp.sin(theta)
+        y = self.center_y + self.b * jnp.sin(2 * theta)  # Doubled frequency for figure-eight
+        z = self.alt * jnp.ones_like(theta)
+
+        # Velocity calculations
+        vx = self.a * omega * jnp.cos(theta)
+        vy = self.b * 2 * omega * jnp.cos(2 * theta)
+        vz = jnp.zeros_like(theta)
+
+        # Acceleration calculations
+        ax = -self.a * omega**2 * jnp.sin(theta)
+        ay = -self.b * 4 * omega**2 * jnp.sin(2 * theta)
+        az = jnp.zeros_like(theta)
+
+        r = jnp.expand_dims(jnp.vstack((x, y, z)).T, axis=0)
+        dr = jnp.expand_dims(jnp.vstack((vx, vy, vz)).T, axis=0)
+        ddr = jnp.expand_dims(jnp.vstack((ax, ay, az)).T, axis=0)
+
+        return r, dr, ddr
+    
+    def generate_all_trajectories(self):
+        all_goals = []
+        for i in range(self.num_traj):
+            goal_i = []
+            for r_i, dr_i, ddr_i in zip(self.r[i], self.dr[i], self.ddr[i]):
+                goal_i.append((r_i, dr_i, ddr_i))
+            all_goals.append(goal_i)
+        return all_goals

@@ -14,14 +14,14 @@ from structs import FlightMode
 from threading import Event
 
 from helpers import quat2yaw, saturate, simpleInterpolation, wrap, start_rosbag_recording, stop_rosbag_recording
-from trajectories import Circle, Point, Spline
+from trajectories import Circle, FigureEight, Point, Spline
 from wind import WindSim
 
 class TrajectoryGenerator:
     def __init__(self):
-        self.traj_type = 'spline' # spline, point, circle
+        self.traj_type = 'spline' # 'spline', 'point', 'circle', 'figure_eight'
         self.auto = True # if finished, automatically switch to traj following mode?
-        self.wind_off = False
+        self.wind_type = 'constant' # None, 'constant', ''
         self.num_traj = 10
 
         self.T = 30
@@ -175,7 +175,7 @@ class TrajectoryGenerator:
             self.pub_index_ = 0
             self.flight_mode_ = FlightMode.TRAJ_FOLLOWING
             # Start wind
-            self.wind_ = self.winds_full_[self.index]
+            self.traj_winds_ = self.winds_full_[self.index]
             self.record = True
             rospy.loginfo(f"Following trajectory {self.index+1}...")
         elif self.flight_mode_ == FlightMode.INIT_POS_TRAJ and msg.mode == msg.LAND:
@@ -270,13 +270,14 @@ class TrajectoryGenerator:
                 self.pub_index_ = 0
                 self.flight_mode_ = FlightMode.TRAJ_FOLLOWING
                 # Start wind
-                self.wind_ = self.winds_full_[self.index]
+                self.traj_winds_ = self.winds_full_[self.index]
                 self.record = True
                 rospy.loginfo(f"Following trajectory {self.index+1}...")
 
         # follow trajectory
         elif self.flight_mode_ == FlightMode.TRAJ_FOLLOWING:
             self.goal_ = self.traj_goals_[self.pub_index_]
+            self.wind_ = self.traj_winds_[self.pub_index_]
             # TODO: RECORD DATA FOR STATE AND GOAL
             self.record_data()
             self.pub_index_ += 1
@@ -351,16 +352,15 @@ class TrajectoryGenerator:
     
     def generate_trajectory(self):
         print("Generating trajectories...")
-        if self.traj_type == 'spline':
-            spline_traj = Spline(self.num_traj, self.T, self.dt_, self.key, self.xmin_, self.ymin_, self.zmin_, self.xmax_, self.ymax_, self.zmax_)
-            all_goals = spline_traj.generate_all_trajectories()
         if self.traj_type == 'point':
             points = [
                 np.array([1, 1, 1]),
             ]
+
             point_traj = Point(points)
             all_goals = point_traj.generate_all_trajectories()
-        if self.traj_type == 'circle':
+
+        elif self.traj_type == 'circle':
             radius = 2.0
             center_x = 0.0
             center_y = 0.0
@@ -368,11 +368,26 @@ class TrajectoryGenerator:
 
             circle_traj = Circle(self.T, self.dt_, radius, center_x, center_y, alt)
             all_goals = circle_traj.generate_all_trajectories()
+
+        elif self.traj_type == 'figure_eight':
+            a = 3.0
+            b = 1.5
+            center_x = 0.0
+            center_y = 0.0
+            alt = 1.0
+
+            figure_eight_traj = FigureEight(self.T, self.dt_, a, b, center_x, center_y, alt)
+            all_goals = figure_eight_traj.generate_all_trajectories()
+
+        else:
+            spline_traj = Spline(self.num_traj, self.T, self.dt_, self.key, self.xmin_, self.ymin_, self.zmin_, self.xmax_, self.ymax_, self.zmax_)
+            all_goals = spline_traj.generate_all_trajectories()
+
         print("Finished generating trajectories...")
         return all_goals
 
     def generate_wind(self): 
-        wind_sim = WindSim(self.key, self.num_traj, self.wind_off)
+        wind_sim = WindSim(self.key, self.num_traj, self.T, self.dt_, self.wind_type)
         all_winds = wind_sim.generate_all_winds()
         
         return all_winds
