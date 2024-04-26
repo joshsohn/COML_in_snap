@@ -22,9 +22,9 @@ class TrajectoryGenerator:
         self.traj_type = 'spline' # spline, point, circle
         self.auto = True # if finished, automatically switch to traj following mode?
         self.wind_off = False
-        self.num_traj = 1
+        self.num_traj = 10
 
-        self.T = 20
+        self.T = 30
         self.seed = 0
         self.key = jax.random.PRNGKey(self.seed)
 

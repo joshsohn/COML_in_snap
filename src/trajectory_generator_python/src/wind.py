@@ -17,28 +17,28 @@ class WindSim():
             self.b = 9.      # shape parameter `b` for beta distribution
             self.key, subkey = jax.random.split(self.key, 2)
             self.w = self.w_min + (self.w_max - self.w_min)*jax.random.beta(subkey, self.a, self.b, (self.num_traj,))
+
+            # Randomize wind direction
+            random_vectors = jax.random.normal(self.key, (self.num_traj, 3))
+            unit_vectors = random_vectors/jnp.linalg.norm(random_vectors, axis=1, keepdims=True)
+            self.w_nominal_vectors = self.w[:, jnp.newaxis]*unit_vectors
     
-    def create_wind(self, w):
+    def create_wind(self, w_nominal_vector):
         wind = Wind()
-        random_vector = jax.random.normal(self.key, (3,))
-        unit_vector = random_vector/jnp.linalg.norm(random_vector)
-        w_nominal_vector = w*unit_vector
+
         wind.w_nominal.x = w_nominal_vector[0]*3
         wind.w_nominal.y = w_nominal_vector[1]*3
         wind.w_nominal.z = w_nominal_vector[2]*3
-        
-        random_vector = jax.random.normal(self.key, (3,))
-        unit_vector = random_vector/jnp.linalg.norm(random_vector)
-        w_gust_vector = w*unit_vector
-        wind.w_gust.x = w_gust_vector[0]
-        wind.w_gust.y = w_gust_vector[1]
-        wind.w_gust.z = w_gust_vector[2]
+
+        wind.w_gust.x = 0
+        wind.w_gust.y = 0
+        wind.w_gust.z = 0
 
         return wind
 
     def generate_all_winds(self):
         all_winds = []
         for i in range(self.num_traj):
-            all_winds.append(self.create_wind(self.w[i]))
+            all_winds.append(self.create_wind(self.w_nominal_vectors[i]))
         
         return all_winds
