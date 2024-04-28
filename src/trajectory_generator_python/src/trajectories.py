@@ -265,6 +265,6 @@ class FigureEight():
         for i in range(self.num_traj):
             goal_i = []
             for r_i, dr_i, ddr_i in zip(self.r[i], self.dr[i], self.ddr[i]):
-                goal_i.append((r_i, dr_i, ddr_i))
+                goal_i.append(create_goal(r_i, dr_i, ddr_i))
             all_goals.append(goal_i)
         return all_goals

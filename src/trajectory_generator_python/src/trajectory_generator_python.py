@@ -19,16 +19,15 @@ from wind import WindSim
 
 class TrajectoryGenerator:
     def __init__(self):
-        self.traj_type = 'spline' # 'spline', 'point', 'circle', 'figure_eight'
+        self.traj_type = 'circle' # 'spline', 'point', 'circle', 'figure_eight'
         self.auto = True # if finished, automatically switch to traj following mode?
-        self.wind_type = 'constant' # None, 'constant', ''
-        self.num_traj = 10
+        self.wind_type = 10 # None, 'random', 'sine', int/float
+        self.num_traj = 1
 
-        self.T = 30
-        self.seed = 0
+        self.T = 15
+        self.seed = 2
         self.key = jax.random.PRNGKey(self.seed)
 
-        self.alt_ = rospy.get_param('~alt', default=None)
         self.freq = rospy.get_param('~pub_freq', default=None)
         self.dt_ = 1.0 / self.freq
 
@@ -51,9 +50,6 @@ class TrajectoryGenerator:
         self.zmin_ = rospy.get_param("~/room_bounds/z_min")
         self.zmax_ = rospy.get_param("~/room_bounds/z_max")
 
-        self.traj_goals_full_ = self.generate_trajectory()
-        self.winds_full_ = self.generate_wind()
-        self.index = 0
 
         self.flight_mode_ = FlightMode.GROUND
         self.pose_ = Pose()
@@ -65,6 +61,8 @@ class TrajectoryGenerator:
 
         self.record = False
 
+        self.rosbag_proc = None
+
         self.state_initialized = Event()
 
         # Subscribe and publish
@@ -72,11 +70,15 @@ class TrajectoryGenerator:
         rospy.Subscriber('state', State, self.state_cb)
         rospy.Subscriber('attcmd', AttitudeCommand, self.cmd_cb)
  
+        self.state_initialized.wait()  # To ensure that the state has been received
+
         self.pub_timer_ = rospy.Timer(rospy.Duration(self.dt_), self.pub_cb)
         self.pub_goal_ = rospy.Publisher('goal',Goal, queue_size=1)
         self.pub_wind_ = rospy.Publisher('wind',Wind, queue_size=1)
-        
-        self.state_initialized.wait()  # To ensure that the state has been received
+
+        self.traj_goals_full_ = self.generate_trajectory()
+        self.winds_full_ = self.generate_wind()
+        self.index = 0
 
         self.reset_goal()
         self.goal_.p.x = self.pose_.position.x
@@ -94,8 +96,6 @@ class TrajectoryGenerator:
         self.omega = np.zeros((self.num_traj, int(self.T/self.dt_)+1, 3))
 
         rospy.loginfo("Successfully launched trajectory generator node.")
-
-        self.rosbag_proc = start_rosbag_recording('-a')
 
         if self.auto:
             self.take_off()
@@ -163,6 +163,8 @@ class TrajectoryGenerator:
             self.flight_mode_ = FlightMode.INIT_POS_TRAJ
             print(f"Going to the initial position of trajectory {self.index+1}...")
         elif self.flight_mode_ == FlightMode.INIT_POS_TRAJ and msg.mode == msg.GO:
+            if not self.rosbag_proc:
+                self.rosbag_proc = start_rosbag_recording('-a')
             # Start following the generated trajectory if close to the init pos (in 2D)
             dist_to_init = math.sqrt(pow(self.traj_goals_[0].p.x - self.pose_.position.x, 2) +
                                     pow(self.traj_goals_[0].p.y - self.pose_.position.y, 2) +
@@ -212,6 +214,7 @@ class TrajectoryGenerator:
         self.vel_.angular.z = msg.w.z
 
         if not self.state_initialized.is_set():
+            self.alt_ = msg.pos.z + 1.0 # set alt_ to 1m above initial z position
             self.state_initialized.set()
     
     def cmd_cb(self, msg):
@@ -258,6 +261,8 @@ class TrajectoryGenerator:
                 self.vel_initpos_, self.vel_yaw_, self.dist_thresh_, 
                 self.yaw_thresh_, self.dt_, finished)
             if (self.auto) and finished: 
+                if not self.rosbag_proc:
+                    self.rosbag_proc = start_rosbag_recording('-a')
                     # Start following the generated trajectory if close to the init pos (in 2D)
                 dist_to_init = math.sqrt(pow(self.traj_goals_[0].p.x - self.pose_.position.x, 2) +
                                         pow(self.traj_goals_[0].p.y - self.pose_.position.y, 2) +
@@ -364,7 +369,7 @@ class TrajectoryGenerator:
             radius = 2.0
             center_x = 0.0
             center_y = 0.0
-            alt = 1.0
+            alt = self.alt_
 
             circle_traj = Circle(self.T, self.dt_, radius, center_x, center_y, alt)
             all_goals = circle_traj.generate_all_trajectories()
@@ -374,7 +379,7 @@ class TrajectoryGenerator:
             b = 1.5
             center_x = 0.0
             center_y = 0.0
-            alt = 1.0
+            alt = self.alt_
 
             figure_eight_traj = FigureEight(self.T, self.dt_, a, b, center_x, center_y, alt)
             all_goals = figure_eight_traj.generate_all_trajectories()

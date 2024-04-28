@@ -33,34 +33,13 @@ class OuterLoop:
             rospack = rospkg.RosPack()
             package_path = rospack.get_path('outer_loop_python')
 
-            trial_name = 'reg_P_2e-3_reg_k_R_2e-3_k_R_z_1.4'
-            filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.0020.pkl'
-
-            # trial_name = 'reg_P_1e-1_reg_k_R_0_k_R_scale_1_k_R_z_1.4'
-            # filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.1000.pkl'
-
-            # trial_name = 'reg_P_2e-3_reg_k_R_0_k_R_scale_1.15'
-            # filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.0020.pkl'
-
-            # trial_name = 'reg_P_1_reg_Kr_1e-3'
-            # filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=1.0000.pkl'
-
-            # trial_name = 'reg_P_1e-2_reg_k_R_0_k_R_scale_1.1_k_R_z_1.4'
-            # filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.0100.pkl'
-
-            # trial_name = 'reg_P_1e-1_reg_k_R_0_k_R_scale_1.1_k_R_z_1.4'
-            # filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.1000.pkl'
+            trial_name = 'reg_P_1_reg_Kr_1e-3'
+            filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=1.0000.pkl'
 
             # trial_name = 'reg_P_2e-3_reg_k_R_2e-3_k_R_z_1'
             # filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.0020.pkl'
 
-            # trial_name = 'reg_P_1e-1_reg_k_R_1e-6'
-            # filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.1000.pkl'
-
             # trial_name = 'reg_P_1e-1_reg_k_R_0'
-            # filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.1000.pkl'
-
-            # trial_name = 'reg_P_1e-1_reg_k_R_1e-5'
             # filename = 'seed=0_M=50_E=1000_pinit=2.00_pfreq=2000_regP=0.1000.pkl'
 
             model_dir = f'{package_path}/models/{trial_name}'
