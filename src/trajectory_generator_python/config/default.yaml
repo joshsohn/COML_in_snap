@@ -25,11 +25,13 @@ pub_freq: 150  # Hz
 # Other params
 vel_initpos: 0.4  # m/s horizontal speed towards initial point
 vel_take: 0.3  # m/s of vertical speed
-vel_land_fast: 0.35
-vel_land_slow: 0.04
+vel_land_fast: 0.5
+# vel_land_fast: 0.35
+vel_land_slow: 0.2
+# vel_land_slow: 0.04
 vel_yaw: 0.2
 
-dist_thresh: 0.2  # m
-yaw_thresh: 0.2  # rad
+dist_thresh: 0.6  # m
+yaw_thresh: 0.6  # rad
 
 margin_takeoff_outside_bounds: 0.05  # m

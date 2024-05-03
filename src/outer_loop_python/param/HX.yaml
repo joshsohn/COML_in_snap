@@ -4,7 +4,7 @@ spinup:
   thrust_gs: 0.7   # normalized thrust [g's] for idling (< 1)
 
 # Vehicle parameters
-mass: 1.3             # AUW of vehicle [kg]
+mass: 1.2             # AUW of vehicle [kg]
 
 safety:
   alt_limit: 4.0  # Alititude limit [m] before killing motors
@@ -15,7 +15,7 @@ Kp/xy: 2.0
 Ki/xy: 0.0 #5.5
 Kd/xy: 3.0
 Kp/z: 2.0
-Ki/z: 0.0 #3.5
+Ki/z: 1.0 #3.5
 Kd/z: 3.0
 
 # Kp/xy: 200.0
