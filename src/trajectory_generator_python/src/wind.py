@@ -14,6 +14,15 @@ class WindSim():
         if self.wind_type is None or self.wind_type == 'None':
             self.winds = jnp.zeros((self.num_traj, len(self.t), 3))
         elif self.wind_type == 'sine':
+            amplitude = 3
+            vertical_shift = 10
+            sine_wave = vertical_shift + amplitude * jnp.sin(self.t[:, None])
+
+            direction_vector = jnp.array([1, 1, 1]) / jnp.sqrt(3)
+
+            self.winds = jnp.array([sine_wave * direction_vector for i in range(self.num_traj)])
+
+        elif self.wind_type == 'random_sine':
             keys = jax.random.split(self.key, 3)  # Split the key into parts for amplitude, period, and phase
         
             # Random amplitudes between 1 and 5

@@ -19,9 +19,9 @@ from wind import WindSim
 
 class TrajectoryGenerator:
     def __init__(self):
-        self.traj_type = 'circle' # 'spline', 'point', 'circle', 'figure_eight'
+        self.traj_type = 'figure_eight' # 'spline', 'point', 'circle', 'figure_eight'
         self.auto = True # if finished, automatically switch to traj following mode?
-        self.wind_type = 10 # None, 'random', 'sine', int/float
+        self.wind_type = 'sine' # None, 'sine', 'random_constant', 'random_sine', int/float
         self.num_traj = 1
 
         self.T = 15
